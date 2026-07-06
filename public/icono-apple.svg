@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="LaundryOS Pro">
+  <rect width="512" height="512" rx="104" fill="#0E6F8F"/>
+  <rect x="104" y="96" width="304" height="320" rx="34" fill="#FFFFFF"/>
+  <path d="M136 156h224" stroke="#D8E8EE" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="256" cy="294" r="96" fill="#19A974"/>
+  <path d="M178 300c42 33 98 29 137-8 20-19 40-22 59-9-8 52-52 91-106 96-51 5-99-25-118-72 9-12 18-14 28-7Z" fill="#FFFFFF" opacity=".92"/>
+  <circle cx="352" cy="156" r="22" fill="#F5A623"/>
+</svg>
