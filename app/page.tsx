@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, BadgeDollarSign, Building2, ChevronDown, CircleDollarSign, Cog, Download, Factory, Globe2, Landmark, LayoutDashboard, Plus, Save, ShieldCheck, UsersRound, Wrench, X } from "lucide-react";
+import { Activity, BadgeDollarSign, Building2, ChevronDown, CircleDollarSign, Cog, Download, Factory, Globe2, Landmark, LayoutDashboard, Pencil, Plus, Save, ShieldCheck, UsersRound, Wrench, X } from "lucide-react";
 import { BarraNavegacionMovil } from "@/components/BarraNavegacionMovil";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
 import { BarraProgreso } from "@/components/BarraProgreso";
@@ -11,7 +11,7 @@ import { textosInterfaz } from "@/lib/textosInterfaz";
 type SeccionActiva = "inicio" | "clientes" | "lavanderias" | "finanzas" | "equipos" | "mas";
 type Lavanderia = typeof datosIniciales.lavanderias[number];
 type Equipo = typeof datosIniciales.equipos[number];
-type AccionOperativa = "lavanderia" | "equipo" | "ingreso" | "gasto" | null;
+type AccionOperativa = "lavanderia" | "editar_lavanderia" | "equipo" | "ingreso" | "gasto" | null;
 
 type MovimientoFinanciero = {
   id: string;
@@ -42,6 +42,7 @@ export default function PlataformaLaundryOS() {
   const [movimientos, definirMovimientos] = useState<MovimientoFinanciero[]>([]);
   const [datosListos, definirDatosListos] = useState(false);
   const [accionOperativa, definirAccionOperativa] = useState<AccionOperativa>(null);
+  const [lavanderiaEnEdicion, definirLavanderiaEnEdicion] = useState<Lavanderia | null>(null);
   const t = textosInterfaz[idioma];
 
   useEffect(() => {
@@ -122,6 +123,39 @@ export default function PlataformaLaundryOS() {
     };
     definirLavanderias((actuales) => [nuevaLavanderia, ...actuales]);
     definirSeccion("lavanderias");
+    definirAccionOperativa(null);
+  }
+
+  function abrirEdicionLavanderia(lavanderiaId: string) {
+    const lavanderia = lavanderias.find((item) => item.id === lavanderiaId);
+    if (!lavanderia || (rol !== "administrador" && rol !== "arquitecto")) return;
+    definirLavanderiaEnEdicion(lavanderia);
+    definirAccionOperativa("editar_lavanderia");
+  }
+
+  function editarLavanderia(datos: FormData) {
+    if (!lavanderiaEnEdicion || (rol !== "administrador" && rol !== "arquitecto")) return;
+    const nombre = String(datos.get("nombre") || "").trim();
+    const direccion = String(datos.get("direccion") || "").trim();
+    if (!nombre || !direccion) return;
+
+    definirLavanderias((actuales) =>
+      actuales.map((lavanderia) => {
+        if (lavanderia.id !== lavanderiaEnEdicion.id) return lavanderia;
+        const ingresosMensuales = Number(datos.get("ingresos")) || 0;
+        const egresosMensuales = Number(datos.get("egresos")) || 0;
+        return {
+          ...lavanderia,
+          nombre,
+          direccion,
+          ingresosMensuales,
+          egresosMensuales,
+          rentabilidad: ingresosMensuales - egresosMensuales,
+          ciclosMensuales: Number(datos.get("ciclos")) || 0
+        };
+      })
+    );
+    definirLavanderiaEnEdicion(null);
     definirAccionOperativa(null);
   }
 
@@ -269,7 +303,16 @@ export default function PlataformaLaundryOS() {
 
       {seccion === "inicio" && <VistaInicio t={t} lavanderias={lavanderiasVisibles} moneda={clienteInicial.moneda} equipos={equipos} />}
       {seccion === "clientes" && <VistaClientes t={t} rol={rol} />}
-      {seccion === "lavanderias" && <VistaLavanderias t={t} lavanderias={lavanderiasVisibles} moneda={clienteInicial.moneda} alNuevoEquipo={() => definirAccionOperativa("equipo")} />}
+      {seccion === "lavanderias" && (
+        <VistaLavanderias
+          t={t}
+          lavanderias={lavanderiasVisibles}
+          moneda={clienteInicial.moneda}
+          puedeEditar={rol === "administrador" || rol === "arquitecto"}
+          alEditar={abrirEdicionLavanderia}
+          alNuevoEquipo={() => definirAccionOperativa("equipo")}
+        />
+      )}
       {seccion === "finanzas" && <VistaFinanzas t={t} lavanderias={lavanderiasVisibles} moneda={clienteInicial.moneda} movimientos={movimientos} alIngreso={() => definirAccionOperativa("ingreso")} alGasto={() => definirAccionOperativa("gasto")} />}
       {seccion === "equipos" && <VistaEquipos t={t} equipos={equipos} moneda={clienteInicial.moneda} alNuevoEquipo={() => definirAccionOperativa("equipo")} />}
       {seccion === "mas" && <VistaMas t={t} alDescargar={descargarRespaldo} />}
@@ -278,8 +321,13 @@ export default function PlataformaLaundryOS() {
       <ModalOperativo
         accion={accionOperativa}
         lavanderias={lavanderiasVisibles}
-        alCerrar={() => definirAccionOperativa(null)}
+        lavanderiaEnEdicion={lavanderiaEnEdicion}
+        alCerrar={() => {
+          definirAccionOperativa(null);
+          definirLavanderiaEnEdicion(null);
+        }}
         alCrearLavanderia={crearLavanderia}
+        alEditarLavanderia={editarLavanderia}
         alCrearEquipo={crearEquipo}
         alCrearIngreso={(datos) => crearMovimiento(datos, "ingreso")}
         alCrearGasto={(datos) => crearMovimiento(datos, "egreso")}
@@ -344,7 +392,21 @@ function VistaClientes({ t, rol }: { t: typeof textosInterfaz.es; rol: RolUsuari
   );
 }
 
-function VistaLavanderias({ t, lavanderias, moneda, alNuevoEquipo }: { t: typeof textosInterfaz.es; lavanderias: Lavanderia[]; moneda: string; alNuevoEquipo: () => void }) {
+function VistaLavanderias({
+  t,
+  lavanderias,
+  moneda,
+  puedeEditar,
+  alEditar,
+  alNuevoEquipo
+}: {
+  t: typeof textosInterfaz.es;
+  lavanderias: Lavanderia[];
+  moneda: string;
+  puedeEditar: boolean;
+  alEditar: (lavanderiaId: string) => void;
+  alNuevoEquipo: () => void;
+}) {
   return (
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {lavanderias.map((lavanderia) => (
@@ -354,7 +416,22 @@ function VistaLavanderias({ t, lavanderias, moneda, alNuevoEquipo }: { t: typeof
               <h2 className="truncate text-lg font-black text-tinta">{lavanderia.nombre}</h2>
               <p className="mt-1 text-sm font-semibold text-blue-500">{lavanderia.direccion}</p>
             </div>
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-blue-100 text-oceano"><Building2 /></span>
+            {puedeEditar ? (
+              <button
+                type="button"
+                onClick={() => alEditar(lavanderia.id)}
+                className="relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-blue-100 text-oceano transition hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-oceano"
+                title="Editar lavandería"
+                aria-label={`Editar ${lavanderia.nombre}`}
+              >
+                <Building2 />
+                <span className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-oceano text-white shadow-sm">
+                  <Pencil size={11} />
+                </span>
+              </button>
+            ) : (
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-blue-100 text-oceano"><Building2 /></span>
+            )}
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
             <MiniDato etiqueta={t.ingresos} valor={formatoMoneda(lavanderia.ingresosMensuales, moneda)} />
@@ -446,16 +523,20 @@ function VistaMas({ t, alDescargar }: { t: typeof textosInterfaz.es; alDescargar
 function ModalOperativo({
   accion,
   lavanderias,
+  lavanderiaEnEdicion,
   alCerrar,
   alCrearLavanderia,
+  alEditarLavanderia,
   alCrearEquipo,
   alCrearIngreso,
   alCrearGasto
 }: {
   accion: AccionOperativa;
   lavanderias: Lavanderia[];
+  lavanderiaEnEdicion: Lavanderia | null;
   alCerrar: () => void;
   alCrearLavanderia: (datos: FormData) => void;
+  alEditarLavanderia: (datos: FormData) => void;
   alCrearEquipo: (datos: FormData) => void;
   alCrearIngreso: (datos: FormData) => void;
   alCrearGasto: (datos: FormData) => void;
@@ -463,6 +544,7 @@ function ModalOperativo({
   if (!accion) return null;
   const titulo = {
     lavanderia: "Crear lavandería",
+    editar_lavanderia: "Editar lavandería",
     equipo: "Crear equipo",
     ingreso: "Registrar recaudación",
     gasto: "Registrar gasto"
@@ -472,6 +554,7 @@ function ModalOperativo({
     evento.preventDefault();
     const datos = new FormData(evento.currentTarget);
     if (accion === "lavanderia") alCrearLavanderia(datos);
+    if (accion === "editar_lavanderia") alEditarLavanderia(datos);
     if (accion === "equipo") alCrearEquipo(datos);
     if (accion === "ingreso") alCrearIngreso(datos);
     if (accion === "gasto") alCrearGasto(datos);
@@ -486,14 +569,14 @@ function ModalOperativo({
         </div>
 
         <div className="mt-5 grid gap-3">
-          {accion === "lavanderia" && (
+          {(accion === "lavanderia" || accion === "editar_lavanderia") && (
             <>
-              <Campo nombre="nombre" etiqueta="Nombre" requerido />
-              <Campo nombre="direccion" etiqueta="Dirección" requerido />
+              <Campo nombre="nombre" etiqueta="Nombre" valorInicial={lavanderiaEnEdicion?.nombre} requerido />
+              <Campo nombre="direccion" etiqueta="Dirección" valorInicial={lavanderiaEnEdicion?.direccion} requerido />
               <div className="grid grid-cols-3 gap-2">
-                <Campo nombre="ingresos" etiqueta="Ingresos base" tipo="number" />
-                <Campo nombre="egresos" etiqueta="Egresos base" tipo="number" />
-                <Campo nombre="ciclos" etiqueta="Ciclos" tipo="number" />
+                <Campo nombre="ingresos" etiqueta="Ingresos base" tipo="number" valorInicial={lavanderiaEnEdicion?.ingresosMensuales} />
+                <Campo nombre="egresos" etiqueta="Egresos base" tipo="number" valorInicial={lavanderiaEnEdicion?.egresosMensuales} />
+                <Campo nombre="ciclos" etiqueta="Ciclos" tipo="number" valorInicial={lavanderiaEnEdicion?.ciclosMensuales} />
               </div>
             </>
           )}
@@ -536,7 +619,7 @@ function ModalOperativo({
   );
 }
 
-function Campo({ nombre, etiqueta, tipo = "text", requerido = false, valorInicial = "" }: { nombre: string; etiqueta: string; tipo?: string; requerido?: boolean; valorInicial?: string }) {
+function Campo({ nombre, etiqueta, tipo = "text", requerido = false, valorInicial = "" }: { nombre: string; etiqueta: string; tipo?: string; requerido?: boolean; valorInicial?: string | number }) {
   return (
     <label className="grid gap-1 text-sm font-black text-blue-900">
       {etiqueta}
